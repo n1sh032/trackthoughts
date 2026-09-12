@@ -1,32 +1,35 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import './App.css'
 
-const songs = [
-  {
-    title: 'always',
-    artist: 'daniel caesar',
-    meaning:
-      'it’s about loving someone so deeply that letting them go feels worse than the pain of staying.',
-    detail:
-      'even if the other person moves on, he would rather wait quietly in the background than disappear from their life. it is the feeling of being the one who never leaves.',
-    themes: ['longing', 'loyalty', 'heartbreak'],
-  },
-  {
-    title: 'drivers license',
-    artist: 'olivia rodrigo',
-    meaning:
-      'it’s about replaying a breakup in your head while everyday places and memories make it impossible to move on.',
-    detail:
-      'getting her licence was supposed to be exciting, but it becomes another reminder of the person she imagined sharing that moment with.',
-    themes: ['first heartbreak', 'jealousy', 'nostalgia'],
-  },
-]
-
 function App() {
+  const [songs, setSongs] = useState([])
   const [showMeaning, setShowMeaning] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingSongs, setIsLoadingSongs] = useState(true)
   const [songIndex, setSongIndex] = useState(0)
   const [search, setSearch] = useState('')
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    async function getSongs() {
+      try {
+        const response = await fetch('http://localhost:3000/api/songs')
+
+        if (!response.ok) {
+          throw new Error('the server did not send the songs')
+        }
+
+        const data = await response.json()
+        setSongs(data)
+      } catch (err) {
+        setError('could not load songs. make sure the server is running.')
+      } finally {
+        setIsLoadingSongs(false)
+      }
+    }
+
+    getSongs()
+  }, [])
 
   const song = songs[songIndex]
 
@@ -44,6 +47,24 @@ function App() {
     const songText = `${item.title} ${item.artist}`.toLowerCase()
     return songText.includes(search.toLowerCase())
   })
+
+  if (isLoadingSongs) {
+    return (
+      <main className="app">
+        <p className="logo">trackthoughts</p>
+        <p className="intro">getting songs ready...</p>
+      </main>
+    )
+  }
+
+  if (error) {
+    return (
+      <main className="app">
+        <p className="logo">trackthoughts</p>
+        <p className="intro">{error}</p>
+      </main>
+    )
+  }
 
   return (
     <main className="app">
