@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>trackthoughts</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="app">
+      <p class="logo">trackthoughts</p>
+
+      <div id="connect-view" class="hidden">
+        <p class="intro">connect Spotify to see what your songs mean.</p>
+        <button id="connect-button">connect Spotify</button>
+      </div>
+
+      <div id="status-view" class="hidden">
+        <p class="intro" id="status-text"></p>
+        <button id="refresh-button">refresh</button>
+      </div>
+
+      <div id="song-view" class="hidden">
+        <div class="song-header">
+          <img id="song-art" class="song-art" alt="" />
+          <div>
+            <h2 id="song-title"></h2>
+            <p class="artist" id="song-artist"></p>
+            <a id="song-link" class="spotify-link" target="_blank" rel="noreferrer"
+              >open in Spotify ↗</a
+            >
+          </div>
+        </div>
+
+        <div id="meaning-block" class="meaning hidden">
+          <p class="meaning-label">what this song means</p>
+          <p id="meaning-text"></p>
+          <p id="meaning-detail"></p>
+          <div class="themes" id="meaning-themes"></div>
+        </div>
+
+        <p id="meaning-loading" class="intro hidden">finding the feeling...</p>
+
+        <button id="refresh-button-2">refresh</button>
+      </div>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

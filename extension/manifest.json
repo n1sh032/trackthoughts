@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "trackthoughts",
+  "version": "1.0.0",
+  "description": "See the meaning behind whatever song you're playing on Spotify.",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "trackthoughts"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["storage", "alarms", "notifications"],
+  "host_permissions": ["http://127.0.0.1:3000/*"]
+}

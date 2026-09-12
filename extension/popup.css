@@ -1,0 +1,113 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  width: 340px;
+  background: #111111;
+  color: #f7f4ef;
+  font-family: Arial, sans-serif;
+}
+
+.app {
+  padding: 20px;
+}
+
+.logo {
+  margin: 0 0 18px;
+  color: #b7ff3c;
+  font-size: 14px;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.intro {
+  margin: 0 0 16px;
+  color: #a8a8a8;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+button {
+  width: 100%;
+  padding: 12px;
+  border: 0;
+  border-radius: 12px;
+  background: #b7ff3c;
+  color: #111111;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.song-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.song-art {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: #292929;
+}
+
+h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.artist {
+  margin: 4px 0 6px;
+  color: #a8a8a8;
+  font-size: 13px;
+}
+
+.spotify-link {
+  color: #b7ff3c;
+  font-size: 12px;
+  font-weight: bold;
+  text-decoration: none;
+}
+
+.meaning {
+  margin-bottom: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #303030;
+  color: #d7d7d7;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.meaning-label {
+  margin: 0 0 8px;
+  color: #b7ff3c;
+  font-size: 11px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.themes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.themes span {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #292929;
+  color: #b7ff3c;
+  font-size: 11px;
+}
