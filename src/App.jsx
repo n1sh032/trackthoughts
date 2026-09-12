@@ -24,10 +24,21 @@ const songs = [
 
 function App() {
   const [showMeaning, setShowMeaning] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
   const [songIndex, setSongIndex] = useState(0)
   const [search, setSearch] = useState('')
 
   const song = songs[songIndex]
+
+  function explainSong() {
+    setIsLoading(true)
+    setShowMeaning(false)
+
+    setTimeout(() => {
+      setIsLoading(false)
+      setShowMeaning(true)
+    }, 700)
+  }
 
   const matchingSongs = songs.filter((item) => {
     const songText = `${item.title} ${item.artist}`.toLowerCase()
@@ -90,8 +101,12 @@ function App() {
         <h2>{song.title}</h2>
         <p className="artist">{song.artist}</p>
 
-        <button onClick={() => setShowMeaning(true)}>
-          {showMeaning ? 'this song is explained' : 'explain this song'}
+        <button onClick={explainSong} disabled={isLoading}>
+          {isLoading
+            ? 'finding the feeling...'
+            : showMeaning
+              ? 'this song is explained'
+              : 'explain this song'}
         </button>
 
         {showMeaning && (

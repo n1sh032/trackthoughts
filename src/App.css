@@ -150,3 +150,7 @@ button {
   margin: 0 0 28px;
   color: #a8a8a8;
 }
+button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
