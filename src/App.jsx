@@ -25,7 +25,14 @@ const songs = [
 function App() {
   const [showMeaning, setShowMeaning] = useState(false)
   const [songIndex, setSongIndex] = useState(0)
+  const [search, setSearch] = useState('')
+
   const song = songs[songIndex]
+
+  const matchingSongs = songs.filter((item) => {
+    const songText = `${item.title} ${item.artist}`.toLowerCase()
+    return songText.includes(search.toLowerCase())
+  })
 
   return (
     <main className="app">
@@ -35,24 +42,49 @@ function App() {
       <p className="intro">understand the feeling behind the songs you love.</p>
 
       <section className="song-card">
-        <label className="picker-label" htmlFor="song-picker">
-          try a different song
+        <label className="picker-label" htmlFor="song-search">
+          search our demo songs
         </label>
 
-        <select
-          id="song-picker"
-          value={songIndex}
+        <input
+          className="song-search"
+          id="song-search"
+          value={search}
           onChange={(event) => {
-            setSongIndex(Number(event.target.value))
-            setShowMeaning(false)
+            const value = event.target.value
+            setSearch(value)
+
+            const foundIndex = songs.findIndex((item) => {
+              const songText = `${item.title} ${item.artist}`.toLowerCase()
+              return songText.includes(value.toLowerCase())
+            })
+
+            if (foundIndex !== -1) {
+              setSongIndex(foundIndex)
+              setShowMeaning(false)
+            }
           }}
-        >
-          {songs.map((song, index) => (
-            <option key={song.title} value={index}>
-              {song.title} — {song.artist}
-            </option>
-          ))}
-        </select>
+          placeholder="try drivers license"
+        />
+
+        {matchingSongs.length > 0 ? (
+          <select
+            id="song-picker"
+            value={songIndex}
+            onChange={(event) => {
+              setSongIndex(Number(event.target.value))
+              setShowMeaning(false)
+            }}
+          >
+            {matchingSongs.map((item) => (
+              <option key={item.title} value={songs.indexOf(item)}>
+                {item.title} — {item.artist}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <p className="no-results">no demo song found yet.</p>
+        )}
 
         <p className="now-playing">now playing</p>
         <h2>{song.title}</h2>
@@ -68,11 +100,11 @@ function App() {
             <p>{song.meaning}</p>
             <p>{song.detail}</p>
 
-<div className="themes">
-  {song.themes.map((theme) => (
-    <span key={theme}>{theme}</span>
-  ))}
-</div>
+            <div className="themes">
+              {song.themes.map((theme) => (
+                <span key={theme}>{theme}</span>
+              ))}
+            </div>
           </div>
         )}
       </section>

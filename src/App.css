@@ -129,3 +129,24 @@ button {
   color: #b7ff3c;
   font-size: 13px;
 }
+
+.song-search {
+  width: 100%;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid #303030;
+  border-radius: 10px;
+  outline: none;
+  background: #111111;
+  color: #f7f4ef;
+  font-size: 15px;
+}
+
+.song-search:focus {
+  border-color: #b7ff3c;
+}
+
+.no-results {
+  margin: 0 0 28px;
+  color: #a8a8a8;
+}
