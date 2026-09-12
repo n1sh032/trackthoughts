@@ -7,12 +7,18 @@ const songs = [
     artist: 'daniel caesar',
     meaning:
       'it’s about loving someone so deeply that letting them go feels worse than the pain of staying.',
+    detail:
+      'even if the other person moves on, he would rather wait quietly in the background than disappear from their life. it is the feeling of being the one who never leaves.',
+    themes: ['longing', 'loyalty', 'heartbreak'],
   },
   {
     title: 'drivers license',
     artist: 'olivia rodrigo',
     meaning:
       'it’s about replaying a breakup in your head while everyday places and memories make it impossible to move on.',
+    detail:
+      'getting her licence was supposed to be exciting, but it becomes another reminder of the person she imagined sharing that moment with.',
+    themes: ['first heartbreak', 'jealousy', 'nostalgia'],
   },
 ]
 
@@ -60,6 +66,13 @@ function App() {
           <div className="meaning">
             <p className="meaning-label">what this song means</p>
             <p>{song.meaning}</p>
+            <p>{song.detail}</p>
+
+<div className="themes">
+  {song.themes.map((theme) => (
+    <span key={theme}>{theme}</span>
+  ))}
+</div>
           </div>
         )}
       </section>

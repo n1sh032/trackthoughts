@@ -115,3 +115,17 @@ button {
   letter-spacing: 1px;
   text-transform: uppercase;
 }
+.themes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.themes span {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: #292929;
+  color: #b7ff3c;
+  font-size: 13px;
+}
