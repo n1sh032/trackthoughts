@@ -6,14 +6,17 @@ function App() {
   const [showMeaning, setShowMeaning] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingSongs, setIsLoadingSongs] = useState(true)
+  const [isCheckingSpotify, setIsCheckingSpotify] = useState(false)
   const [songIndex, setSongIndex] = useState(0)
   const [search, setSearch] = useState('')
   const [error, setError] = useState('')
+  const [spotifySong, setSpotifySong] = useState(null)
+  const [spotifyMessage, setSpotifyMessage] = useState('')
 
   useEffect(() => {
     async function getSongs() {
       try {
-        const response = await fetch('http://localhost:3000/api/songs')
+        const response = await fetch('http://127.0.0.1:3000/api/songs')
 
         if (!response.ok) {
           throw new Error('the server did not send the songs')
@@ -41,6 +44,43 @@ function App() {
       setIsLoading(false)
       setShowMeaning(true)
     }, 700)
+  }
+
+  async function getSpotifySong() {
+    setIsCheckingSpotify(true)
+    setSpotifyMessage('')
+
+    try {
+      const response = await fetch(
+        'http://127.0.0.1:3000/api/current-song',
+        {
+          credentials: 'include',
+        }
+      )
+
+      if (response.status === 401) {
+        window.location.href = 'http://127.0.0.1:3000/login'
+        return
+      }
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.message || 'could not get the Spotify song')
+      }
+
+      if (!data.title) {
+        setSpotifySong(null)
+        setSpotifyMessage(data.message)
+        return
+      }
+
+      setSpotifySong(data)
+    } catch (err) {
+      setSpotifyMessage('could not get the song from Spotify right now.')
+    } finally {
+      setIsCheckingSpotify(false)
+    }
   }
 
   const matchingSongs = songs.filter((item) => {
@@ -72,6 +112,45 @@ function App() {
 
       <h1>what does this song mean?</h1>
       <p className="intro">understand the feeling behind the songs you love.</p>
+
+      <button
+        className="spotify-button"
+        onClick={getSpotifySong}
+        disabled={isCheckingSpotify}
+      >
+        {isCheckingSpotify ? 'checking Spotify...' : 'use what I’m playing'}
+      </button>
+
+      {spotifyMessage && <p className="spotify-message">{spotifyMessage}</p>}
+
+      {spotifySong && (
+        <section className="spotify-card">
+          <p className="spotify-label">detected from Spotify</p>
+
+          <div className="spotify-song">
+            {spotifySong.image && (
+              <img
+                className="spotify-art"
+                src={spotifySong.image}
+                alt={`album cover for ${spotifySong.title}`}
+              />
+            )}
+
+            <div>
+              <h2>{spotifySong.title}</h2>
+              <p className="artist">{spotifySong.artist}</p>
+              <a
+                className="spotify-link"
+                href={spotifySong.spotifyUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                open in Spotify ↗
+              </a>
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="song-card">
         <label className="picker-label" htmlFor="song-search">

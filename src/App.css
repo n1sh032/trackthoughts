@@ -154,3 +154,53 @@ button:disabled {
   cursor: wait;
   opacity: 0.7;
 }
+.spotify-button {
+  margin-bottom: 16px;
+  background: #f7f4ef;
+}
+
+.spotify-card {
+  margin-bottom: 24px;
+  padding: 24px;
+  border: 1px solid #303030;
+  border-radius: 24px;
+  background: #181818;
+}
+
+.spotify-label {
+  margin: 0 0 18px;
+  color: #a8a8a8;
+  font-size: 13px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.spotify-song {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.spotify-art {
+  width: 88px;
+  height: 88px;
+  border-radius: 12px;
+  object-fit: cover;
+}
+
+.spotify-song h2 {
+  font-size: 26px;
+}
+
+.spotify-link {
+  color: #b7ff3c;
+  font-size: 14px;
+  font-weight: bold;
+  text-decoration: none;
+}
+
+.spotify-message {
+  margin: 0 0 16px;
+  color: #a8a8a8;
+}
