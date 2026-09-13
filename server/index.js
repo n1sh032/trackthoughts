@@ -1,6 +1,8 @@
-require('dotenv').config()
+//require('dotenv').config()
 
 const crypto = require('crypto')
+const fs = require('fs')
+const path = require('path')
 const express = require('express')
 const cors = require('cors')
 
@@ -9,22 +11,49 @@ const port = 3000
 
 // this server is designed for a single person running trackthoughts for
 // themselves (used by a browser extension), so we keep everything in
-// memory instead of building out multi-user sessions.
+// memory - but persist to small local files so restarts don't lose
+// your Spotify connection or the meanings you've already paid to generate.
 
-const spotify = {
+const TOKENS_FILE = path.join(__dirname, 'spotify-tokens.json')
+const CACHE_FILE = path.join(__dirname, 'meaning-cache.json')
+
+function loadJSON(file, fallback) {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'))
+  } catch (err) {
+    return fallback
+  }
+}
+
+function saveJSON(file, data) {
+  try {
+    fs.writeFileSync(file, JSON.stringify(data, null, 2))
+  } catch (err) {
+    console.error(`could not save ${file}`, err)
+  }
+}
+
+const spotify = loadJSON(TOKENS_FILE, {
   accessToken: null,
   refreshToken: null,
-  expiresAt: 0, // epoch ms
-}
+  expiresAt: 0,
+})
 
 let pendingLoginState = null
 
-// title::artist -> { meaning, detail, themes, cachedAt }
-const meaningCache = new Map()
+// title::artist -> { meaning, detail, themes, geniusUrl }
+const meaningCache = new Map(Object.entries(loadJSON(CACHE_FILE, {})))
+function saveMeaningCache() {
+  saveJSON(CACHE_FILE, Object.fromEntries(meaningCache))
+}
+
+// avoids double-generating (and double-billing) if two requests for the
+// same not-yet-cached song land at the same time
+const pendingMeanings = new Map()
 
 app.use(
   cors({
-    origin: true, // reflects request origin, works for chrome-extension:// too
+    origin: true,
     credentials: false,
   })
 )
@@ -87,6 +116,7 @@ app.get('/callback', async (req, res) => {
     spotify.accessToken = tokenData.access_token
     spotify.refreshToken = tokenData.refresh_token
     spotify.expiresAt = Date.now() + tokenData.expires_in * 1000
+    saveJSON(TOKENS_FILE, spotify)
 
     res.send(
       '<html><body style="font-family: sans-serif; padding: 40px;">' +
@@ -119,12 +149,23 @@ async function ensureFreshToken() {
     }),
   })
 
-  if (!response.ok) return false
+  if (!response.ok) {
+    // refresh token itself was revoked/expired - clear it so the UI
+    // correctly asks the person to reconnect instead of looping forever
+    if (response.status === 400 || response.status === 401) {
+      spotify.accessToken = null
+      spotify.refreshToken = null
+      spotify.expiresAt = 0
+      saveJSON(TOKENS_FILE, spotify)
+    }
+    return false
+  }
 
   const data = await response.json()
   spotify.accessToken = data.access_token
   spotify.expiresAt = Date.now() + data.expires_in * 1000
   if (data.refresh_token) spotify.refreshToken = data.refresh_token
+  saveJSON(TOKENS_FILE, spotify)
 
   return true
 }
@@ -135,49 +176,57 @@ app.get('/api/connection-status', (req, res) => {
 
 // ---------- currently playing ----------
 
+async function getCurrentSpotifySong() {
+  const spotifyResponse = await fetch(
+    'https://api.spotify.com/v1/me/player/currently-playing',
+    { headers: { Authorization: `Bearer ${spotify.accessToken}` } }
+  )
+
+  if (spotifyResponse.status === 204) {
+    return { message: 'nothing is playing right now' }
+  }
+
+  const spotifyData = await spotifyResponse.json()
+
+  if (!spotifyResponse.ok) {
+    const err = new Error('spotify api error')
+    err.status = spotifyResponse.status
+    err.body = spotifyData
+    throw err
+  }
+
+  if (spotifyData.currently_playing_type !== 'track' || !spotifyData.item) {
+    return { message: 'no track is playing right now' }
+  }
+
+  return {
+    title: spotifyData.item.name,
+    artist: spotifyData.item.artists.map((artist) => artist.name).join(', '),
+    spotifyUrl: spotifyData.item.external_urls.spotify,
+    image: spotifyData.item.album.images[0]?.url || null,
+    isPlaying: spotifyData.is_playing,
+    trackId: spotifyData.item.id,
+  }
+}
+
 app.get('/api/current-song', async (req, res) => {
   if (!spotify.refreshToken) {
     return res.status(401).json({ message: 'connect Spotify first' })
   }
-
   const ok = await ensureFreshToken()
   if (!ok) {
     return res.status(401).json({ message: 'connect Spotify first' })
   }
 
   try {
-    const spotifyResponse = await fetch(
-      'https://api.spotify.com/v1/me/player/currently-playing',
-      { headers: { Authorization: `Bearer ${spotify.accessToken}` } }
-    )
-
-    if (spotifyResponse.status === 204) {
-      return res.json({ message: 'nothing is playing right now' })
-    }
-
-    const spotifyData = await spotifyResponse.json()
-
-    if (!spotifyResponse.ok) {
-      return res.status(spotifyResponse.status).json(spotifyData)
-    }
-
-    if (spotifyData.currently_playing_type !== 'track' || !spotifyData.item) {
-      return res.json({ message: 'no track is playing right now' })
-    }
-
-    res.json({
-      title: spotifyData.item.name,
-      artist: spotifyData.item.artists.map((artist) => artist.name).join(', '),
-      spotifyUrl: spotifyData.item.external_urls.spotify,
-      image: spotifyData.item.album.images[0]?.url || null,
-      isPlaying: spotifyData.is_playing,
-    })
+    const song = await getCurrentSpotifySong()
+    res.json(song)
   } catch (err) {
-    res.status(500).json({ message: 'could not get the current song' })
+    res.status(err.status || 500).json(err.body || { message: 'could not get the current song' })
   }
 })
 
-// ---------- meaning generation ----------
+// ---------- meaning generation (only ever runs on demand) ----------
 
 async function getGeniusContext(title, artist) {
   if (!process.env.GENIUS_ACCESS_TOKEN) return null
@@ -193,8 +242,6 @@ async function getGeniusContext(title, artist) {
     const hit = searchData.response?.hits?.[0]?.result
     if (!hit) return null
 
-    // We only ever pull metadata/annotation text here, never lyrics -
-    // Genius's API doesn't expose full lyrics text anyway.
     const songResponse = await fetch(
       `https://api.genius.com/songs/${hit.id}?text_format=plain`,
       { headers: { Authorization: `Bearer ${process.env.GENIUS_ACCESS_TOKEN}` } }
@@ -233,10 +280,13 @@ async function generateMeaning(title, artist, context) {
         {
           role: 'system',
           content:
-            'You write short, warm, insightful interpretations of what a song is about for a music app called trackthoughts. ' +
-            'Never quote or reproduce actual lyrics. Respond with ONLY a JSON object, no markdown fences, no preamble, ' +
-            'in this exact shape: {"meaning": string (1 sentence, the core idea), "detail": string (2-3 sentences, deeper read), ' +
-            '"themes": [string, string, string] (short lowercase theme tags)}.',
+            'You help someone FEEL a song, not analyze it. Write like you are texting a friend about a song that moved you - ' +
+            'plain words, short sentences, no music-critic language ("explores themes of", "juxtaposes", "the narrative arc"). ' +
+            'Picture the exact moment or feeling the artist was in when they wrote it, and describe that moment like you were there ' +
+            'with them, not like you are summarizing it from the outside. Never quote or reproduce actual lyrics. ' +
+            'Respond with ONLY a JSON object, no markdown fences, no preamble, in this exact shape: ' +
+            '{"meaning": string (1 short sentence, the raw feeling in plain words), "detail": string (2-3 short sentences, put ' +
+            'the listener inside the moment), "themes": [string, string, string] (short lowercase feeling words)}.',
         },
         {
           role: 'user',
@@ -255,6 +305,47 @@ async function generateMeaning(title, artist, context) {
   const cleaned = text.replace(/```json|```/g, '').trim()
   return JSON.parse(cleaned)
 }
+
+function cacheKey(title, artist) {
+  return `${title}::${artist}`.toLowerCase()
+}
+
+async function getOrGenerateMeaning(title, artist) {
+  const key = cacheKey(title, artist)
+
+  if (meaningCache.has(key)) {
+    return { ...meaningCache.get(key), cached: true }
+  }
+
+  // if a generation for this exact song is already in flight, piggyback
+  // on it instead of firing a second (paid) request
+  if (pendingMeanings.has(key)) {
+    return pendingMeanings.get(key)
+  }
+
+  const promise = (async () => {
+    const context = await getGeniusContext(title, artist)
+    const generated = await generateMeaning(title, artist, context)
+    const result = {
+      meaning: generated.meaning,
+      detail: generated.detail,
+      themes: generated.themes || [],
+      geniusUrl: context?.geniusUrl || null,
+    }
+    meaningCache.set(key, result)
+    saveMeaningCache()
+    return { ...result, cached: false }
+  })()
+
+  pendingMeanings.set(key, promise)
+  try {
+    return await promise
+  } finally {
+    pendingMeanings.delete(key)
+  }
+}
+
+// on-demand only - this is the one endpoint that ever spends an OpenAI call
 app.get('/api/meaning', async (req, res) => {
   const { title, artist } = req.query
 
@@ -262,94 +353,36 @@ app.get('/api/meaning', async (req, res) => {
     return res.status(400).json({ message: 'title and artist are required' })
   }
 
-  const key = `${title}::${artist}`.toLowerCase()
-  const cached = meaningCache.get(key)
-  if (cached) {
-    return res.json({ ...cached, cached: true })
-  }
-
   try {
-    const context = await getGeniusContext(title, artist)
-    const meaning = await generateMeaning(title, artist, context)
-
-    const result = {
-      meaning: meaning.meaning,
-      detail: meaning.detail,
-      themes: meaning.themes || [],
-      geniusUrl: context?.geniusUrl || null,
-      cached: false,
-    }
-
-    meaningCache.set(key, result)
+    const result = await getOrGenerateMeaning(title, artist)
     res.json(result)
   } catch (err) {
     res.status(500).json({ message: 'could not generate a meaning for this song right now' })
   }
 })
 
-// convenience endpoint: current song + its meaning in one call, which is
-// what the extension polls
+// polled endpoint - current song + meaning IF already cached. never
+// generates a new one, so background polling never costs anything.
 app.get('/api/now', async (req, res) => {
   if (!spotify.refreshToken) {
     return res.status(401).json({ message: 'connect Spotify first' })
   }
-
   const ok = await ensureFreshToken()
   if (!ok) {
     return res.status(401).json({ message: 'connect Spotify first' })
   }
 
   try {
-    const spotifyResponse = await fetch(
-      'https://api.spotify.com/v1/me/player/currently-playing',
-      { headers: { Authorization: `Bearer ${spotify.accessToken}` } }
-    )
+    const song = await getCurrentSpotifySong()
 
-    if (spotifyResponse.status === 204) {
-      return res.json({ message: 'nothing is playing right now' })
+    if (!song.title) {
+      return res.json({ message: song.message })
     }
 
-    const spotifyData = await spotifyResponse.json()
-
-    if (!spotifyResponse.ok) {
-      return res.status(spotifyResponse.status).json(spotifyData)
-    }
-
-    if (spotifyData.currently_playing_type !== 'track' || !spotifyData.item) {
-      return res.json({ message: 'no track is playing right now' })
-    }
-
-    const song = {
-      title: spotifyData.item.name,
-      artist: spotifyData.item.artists.map((artist) => artist.name).join(', '),
-      spotifyUrl: spotifyData.item.external_urls.spotify,
-      image: spotifyData.item.album.images[0]?.url || null,
-      isPlaying: spotifyData.is_playing,
-      trackId: spotifyData.item.id,
-    }
-
-    const key = `${song.title}::${song.artist}`.toLowerCase()
-    let meaning = meaningCache.get(key)
-
-    if (!meaning) {
-      try {
-        const context = await getGeniusContext(song.title, song.artist)
-        const generated = await generateMeaning(song.title, song.artist, context)
-        meaning = {
-          meaning: generated.meaning,
-          detail: generated.detail,
-          themes: generated.themes || [],
-          geniusUrl: context?.geniusUrl || null,
-        }
-        meaningCache.set(key, meaning)
-      } catch (err) {
-        meaning = null
-      }
-    }
-
-    res.json({ song, meaning })
+    const cached = meaningCache.get(cacheKey(song.title, song.artist))
+    res.json({ song, meaning: cached || null })
   } catch (err) {
-    res.status(500).json({ message: 'could not get the current song' })
+    res.status(err.status || 500).json(err.body || { message: 'could not get the current song' })
   }
 })
 
