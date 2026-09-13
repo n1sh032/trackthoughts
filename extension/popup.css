@@ -223,3 +223,117 @@ h2 {
 .deep p:last-child {
   margin-bottom: 0;
 }
+.progress-section {
+  margin-bottom: 14px;
+}
+
+.volume-section {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #a8a8a8;
+  margin-bottom: 18px;
+}
+
+.range-input {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(to right, #b7ff3c 0%, #4a4a4a 0%);
+  outline: none;
+  cursor: pointer;
+}
+
+.range-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ffffff;
+  cursor: pointer;
+  border: none;
+}
+
+.range-input::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ffffff;
+  cursor: pointer;
+  border: none;
+}
+
+.time-row {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  color: #7a7a7a;
+  font-size: 11px;
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid #262626;
+}
+
+.tab-button {
+  width: auto;
+  flex: 1;
+  background: transparent;
+  color: #7a7a7a;
+  font-size: 12px;
+  font-weight: bold;
+  padding: 8px 0;
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+}
+
+.tab-button:hover {
+  background: transparent;
+  color: #cfcfcf;
+}
+
+.tab-button.active {
+  color: #b7ff3c;
+  border-bottom: 2px solid #b7ff3c;
+}
+
+.lyrics-list {
+  max-height: 260px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.lyrics-empty {
+  color: #7a7a7a;
+  font-size: 13px;
+  text-align: center;
+  padding: 30px 10px;
+}
+
+.lyric-line {
+  margin: 0;
+  padding: 7px 6px;
+  border-radius: 6px;
+  color: #6f6f6f;
+  font-size: 13px;
+  line-height: 1.5;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.lyric-line:hover {
+  background: #1c1c1c;
+  color: #cfcfcf;
+}
+
+.lyric-line.active {
+  color: #ffffff;
+  font-weight: bold;
+  background: #1c1c1c;
+}

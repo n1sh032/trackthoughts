@@ -32,3 +32,4 @@ spotify-tokens.json
 meaning-cache.json
 deep-cache.json
 usage.json
+MAX_SPEND_USD=2.00

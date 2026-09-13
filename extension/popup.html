@@ -39,27 +39,64 @@
           </span>
         </div>
 
-        <div id="explain-block">
-          <button id="explain-button">explain this song</button>
+        <div id="progress-section" class="progress-section hidden">
+          <input id="progress-bar" class="range-input" type="range" min="0" max="100" value="0" />
+          <div class="time-row">
+            <span id="elapsed-label">0:00</span>
+            <span id="duration-label">0:00</span>
+          </div>
         </div>
 
-        <p id="meaning-loading" class="intro hidden">finding the feeling...</p>
+        <div id="volume-section" class="volume-section hidden">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M4 9v6h4l5 5V4L8 9H4z"
+              fill="currentColor"
+            />
+            <path
+              d="M16.5 8.5a5 5 0 010 7"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+            />
+          </svg>
+          <input id="volume-slider" class="range-input" type="range" min="0" max="100" value="50" />
+        </div>
 
-        <div id="meaning-block" class="meaning hidden">
-          <p class="meaning-label">what this song means</p>
-          <p id="meaning-text"></p>
-          <p id="meaning-detail"></p>
-          <div class="themes" id="meaning-themes"></div>
+        <div class="tabs">
+          <button id="tab-meaning" class="tab-button active">Meaning</button>
+          <button id="tab-lyrics" class="tab-button">Lyrics</button>
+        </div>
 
-          <div id="deeper-block" class="hidden">
-            <button id="deeper-button">go deeper</button>
+        <div id="meaning-panel">
+          <div id="explain-block">
+            <button id="explain-button">explain this song</button>
           </div>
 
-          <p id="deep-loading" class="intro hidden">sitting with it a little longer...</p>
+          <p id="meaning-loading" class="intro hidden">finding the feeling...</p>
 
-          <div id="deep-block" class="deep hidden">
-            <p class="meaning-label">going deeper</p>
-            <div id="deep-text"></div>
+          <div id="meaning-block" class="meaning hidden">
+            <p class="meaning-label">what this song means</p>
+            <p id="meaning-text"></p>
+            <p id="meaning-detail"></p>
+            <div class="themes" id="meaning-themes"></div>
+
+            <div id="deeper-block" class="hidden">
+              <button id="deeper-button">go deeper</button>
+            </div>
+
+            <p id="deep-loading" class="intro hidden">sitting with it a little longer...</p>
+
+            <div id="deep-block" class="deep hidden">
+              <p class="meaning-label">going deeper</p>
+              <div id="deep-text"></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="lyrics-panel" class="hidden">
+          <div id="lyrics-list" class="lyrics-list">
+            <p class="lyrics-empty">Loading lyrics...</p>
           </div>
         </div>
 

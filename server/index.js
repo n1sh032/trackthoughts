@@ -58,6 +58,40 @@ function saveDeepCache() {
 // same not-yet-cached song land at the same time
 const pendingMeanings = new Map()
 const pendingDeepDives = new Map()
+// lyrics are free (no OpenAI cost) so we just cache them forever once found
+const LYRICS_CACHE_FILE = path.join(__dirname, 'lyrics-cache.json')
+const lyricsCache = new Map(Object.entries(loadJSON(LYRICS_CACHE_FILE, {})))
+function saveLyricsCache() {
+  saveJSON(LYRICS_CACHE_FILE, Object.fromEntries(lyricsCache))
+}
+// tracks REAL spend using the token counts OpenAI actually reports back -
+// checkable at /api/usage, and self-enforces a hard cap since this uses
+// a borrowed API key
+const USAGE_FILE = path.join(__dirname, 'usage.json')
+const usage = loadJSON(USAGE_FILE, { totalGenerations: 0, totalCostUsd: 0 })
+function saveUsage() {
+  saveJSON(USAGE_FILE, usage)
+}
+
+const PRICE_PER_INPUT_TOKEN = 0.15 / 1_000_000
+const PRICE_PER_OUTPUT_TOKEN = 0.6 / 1_000_000
+
+function recordSpend(data) {
+  const promptTokens = data.usage?.prompt_tokens || 0
+  const completionTokens = data.usage?.completion_tokens || 0
+  usage.totalGenerations += 1
+  usage.totalCostUsd += promptTokens * PRICE_PER_INPUT_TOKEN + completionTokens * PRICE_PER_OUTPUT_TOKEN
+  saveUsage()
+}
+
+function checkSpendCap() {
+  const cap = process.env.MAX_SPEND_USD ? parseFloat(process.env.MAX_SPEND_USD) : null
+  if (cap !== null && usage.totalCostUsd >= cap) {
+    const err = new Error('spend cap reached')
+    err.capReached = true
+    throw err
+  }
+}
 
 app.use(
   cors({
@@ -82,7 +116,7 @@ app.get('/login', (req, res) => {
     client_id: process.env.SPOTIFY_CLIENT_ID,
     response_type: 'code',
     redirect_uri: process.env.SPOTIFY_REDIRECT_URI,
-    scope: 'user-read-currently-playing',
+        scope: 'user-read-currently-playing user-read-playback-state user-modify-playback-state',
     state,
   })
 
@@ -323,6 +357,7 @@ async function generateMeaning(title, artist, context) {
   }
 
   const data = await response.json()
+  recordSpend(data)
   const text = data.choices?.[0]?.message?.content || '{}'
   const cleaned = text.replace(/```json|```/g, '').trim()
   return JSON.parse(cleaned)
@@ -422,6 +457,7 @@ async function generateDeepDive(title, artist, quickMeaning, context) {
   }
 
   const data = await response.json()
+  recordSpend(data)
   const text = data.choices?.[0]?.message?.content || '{}'
   const cleaned = text.replace(/```json|```/g, '').trim()
   return JSON.parse(cleaned)
@@ -439,10 +475,11 @@ async function getOrGenerateDeepDive(title, artist) {
     deepCache.delete(key)
   }
 
+  checkSpendCap()
+
   if (pendingDeepDives.has(key)) {
     return pendingDeepDives.get(key)
   }
-
   const promise = (async () => {
     const [context, quickMeaning] = await Promise.all([
       getGeniusContext(title, artist),
@@ -467,6 +504,16 @@ async function getOrGenerateDeepDive(title, artist) {
 }
 
 // on-demand only - this is the one endpoint that ever spends an OpenAI call
+app.get('/api/usage', (req, res) => {
+  const cap = process.env.MAX_SPEND_USD ? parseFloat(process.env.MAX_SPEND_USD) : null
+  res.json({
+    totalGenerations: usage.totalGenerations,
+    totalCostUsd: Number(usage.totalCostUsd.toFixed(4)),
+    capUsd: cap,
+    remainingUsd: cap !== null ? Number((cap - usage.totalCostUsd).toFixed(4)) : null,
+  })
+})
+
 app.get('/api/meaning', async (req, res) => {
   const { title, artist, depth } = req.query
 
@@ -483,6 +530,11 @@ app.get('/api/meaning', async (req, res) => {
     const result = await getOrGenerateMeaning(title, artist)
     res.json(result)
   } catch (err) {
+    if (err.capReached) {
+      return res
+        .status(402)
+        .json({ message: `spend cap of $${process.env.MAX_SPEND_USD} reached - ask your friend to raise it` })
+    }
     const message =
       depth === 'deep'
         ? 'could not go deeper on this song right now'
@@ -513,6 +565,183 @@ app.get('/api/now', async (req, res) => {
     res.json({ song, meaning: cached || null })
   } catch (err) {
     res.status(err.status || 500).json(err.body || { message: 'could not get the current song' })
+  }
+})
+
+// ---------- live player state (progress, volume) ----------
+
+async function getFullPlayerState() {
+  const spotifyResponse = await fetch('https://api.spotify.com/v1/me/player', {
+    headers: { Authorization: `Bearer ${spotify.accessToken}` },
+  })
+
+  if (spotifyResponse.status === 204) {
+    return { message: 'nothing is playing right now' }
+  }
+
+  const spotifyData = await spotifyResponse.json()
+
+  if (!spotifyResponse.ok) {
+    const err = new Error('spotify api error')
+    err.status = spotifyResponse.status
+    err.body = spotifyData
+    throw err
+  }
+
+  if (spotifyData.currently_playing_type !== 'track' || !spotifyData.item) {
+    return { message: 'no track is playing right now' }
+  }
+
+  return {
+    title: spotifyData.item.name,
+    artist: spotifyData.item.artists.map((artist) => artist.name).join(', '),
+    spotifyUrl: spotifyData.item.external_urls.spotify,
+    image: spotifyData.item.album.images[0]?.url || null,
+    isPlaying: spotifyData.is_playing,
+    trackId: spotifyData.item.id,
+    progressMs: spotifyData.progress_ms || 0,
+    durationMs: spotifyData.item.duration_ms || 0,
+    volumePercent: spotifyData.device?.volume_percent ?? null,
+  }
+}
+
+app.get('/api/player-state', async (req, res) => {
+  if (!spotify.refreshToken) {
+    return res.status(401).json({ message: 'connect Spotify first' })
+  }
+  const ok = await ensureFreshToken()
+  if (!ok) {
+    return res.status(401).json({ message: 'connect Spotify first' })
+  }
+
+  try {
+    const state = await getFullPlayerState()
+    res.json(state)
+  } catch (err) {
+    res.status(err.status || 500).json(err.body || { message: 'could not get player state' })
+  }
+})
+
+app.put('/api/player/volume', async (req, res) => {
+  const percent = Math.round(Number(req.query.percent))
+  if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
+    return res.status(400).json({ message: 'percent must be a number between 0 and 100' })
+  }
+
+  const ok = await ensureFreshToken()
+  if (!ok) return res.status(401).json({ message: 'connect Spotify first' })
+
+  try {
+    const response = await fetch(
+      `https://api.spotify.com/v1/me/player/volume?volume_percent=${percent}`,
+      { method: 'PUT', headers: { Authorization: `Bearer ${spotify.accessToken}` } }
+    )
+    if (!response.ok && response.status !== 204) {
+      const body = await response.json().catch(() => ({}))
+      return res.status(response.status).json(body)
+    }
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(500).json({ message: 'could not change volume - is Spotify open and active on a device?' })
+  }
+})
+
+app.put('/api/player/seek', async (req, res) => {
+  const positionMs = Math.round(Number(req.query.positionMs))
+  if (!Number.isFinite(positionMs) || positionMs < 0) {
+    return res.status(400).json({ message: 'positionMs must be a positive number' })
+  }
+
+  const ok = await ensureFreshToken()
+  if (!ok) return res.status(401).json({ message: 'connect Spotify first' })
+
+  try {
+    const response = await fetch(
+      `https://api.spotify.com/v1/me/player/seek?position_ms=${positionMs}`,
+      { method: 'PUT', headers: { Authorization: `Bearer ${spotify.accessToken}` } }
+    )
+    if (!response.ok && response.status !== 204) {
+      const body = await response.json().catch(() => ({}))
+      return res.status(response.status).json(body)
+    }
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(500).json({ message: 'could not seek - is Spotify open and active on a device?' })
+  }
+})
+
+// ---------- synced lyrics (free, via lrclib.net - no key needed) ----------
+
+function cleanTitleForLyrics(title) {
+  return title
+    .replace(/\(feat\.[^)]*\)/gi, '')
+    .replace(/\[feat\.[^\]]*\]/gi, '')
+    .replace(/-\s*(bonus|remaster(ed)?( \d{4})?|deluxe|live|radio edit|single version).*/gi, '')
+    .trim()
+}
+
+function parseLrc(syncedLyrics) {
+  const lineRegex = /\[(\d{2}):(\d{2}(?:\.\d{1,3})?)\]\s*(.*)/
+  const result = []
+
+  for (const line of syncedLyrics.split('\n')) {
+    const match = line.match(lineRegex)
+    if (!match) continue
+    const text = match[3].trim()
+    if (!text) continue
+    const timeMs = Math.round((parseInt(match[1], 10) * 60 + parseFloat(match[2])) * 1000)
+    result.push({ timeMs, text })
+  }
+
+  return result
+}
+
+async function fetchSyncedLyrics(title, artist, durationMs) {
+  const params = new URLSearchParams({
+    track_name: cleanTitleForLyrics(title),
+    artist_name: artist,
+  })
+  if (durationMs) {
+    params.set('duration', String(Math.round(durationMs / 1000)))
+  }
+
+  const response = await fetch(`https://lrclib.net/api/get?${params}`)
+  if (!response.ok) return null
+
+  const data = await response.json()
+  if (!data.syncedLyrics) return null
+
+  return parseLrc(data.syncedLyrics)
+}
+
+app.get('/api/lyrics', async (req, res) => {
+  const { title, artist, durationMs } = req.query
+
+  if (!title || !artist) {
+    return res.status(400).json({ message: 'title and artist are required' })
+  }
+
+  const key = cacheKey(title, artist)
+
+  if (lyricsCache.has(key)) {
+    const cached = lyricsCache.get(key)
+    if (cached === null) {
+      return res.json({ lines: null, message: 'no synced lyrics found for this song' })
+    }
+    return res.json({ lines: cached, cached: true })
+  }
+
+  try {
+    const lines = await fetchSyncedLyrics(title, artist, Number(durationMs) || null)
+    lyricsCache.set(key, lines && lines.length > 0 ? lines : null)
+    saveLyricsCache()
+
+    if (!lines || lines.length === 0) {
+      return res.json({ lines: null, message: 'no synced lyrics found for this song' })
+    }
+    res.json({ lines, cached: false })
+  } catch (err) {
+    res.status(500).json({ message: 'could not fetch lyrics right now' })
   }
 })
 
