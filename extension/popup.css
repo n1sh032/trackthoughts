@@ -14,12 +14,31 @@ body {
   padding: 20px;
 }
 
+.header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
 .logo {
-  margin: 0 0 18px;
+  margin: 0;
   color: #b7ff3c;
   font-size: 14px;
   font-weight: bold;
   letter-spacing: 1px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4a4a4a;
+}
+
+.status-dot.live {
+  background: #b7ff3c;
+  box-shadow: 0 0 6px #b7ff3c;
 }
 
 .hidden {
@@ -31,6 +50,16 @@ body {
   color: #a8a8a8;
   font-size: 14px;
   line-height: 1.5;
+}
+
+.action-error {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #3a1414;
+  color: #ff9d9d;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 button {
@@ -45,11 +74,26 @@ button {
   font-weight: bold;
 }
 
+button:hover {
+  background: #c9ff6b;
+}
+
+#refresh-button-2 {
+  margin-top: 14px;
+  background: transparent;
+  border: 1px solid #303030;
+  color: #a8a8a8;
+}
+
+#refresh-button-2:hover {
+  background: #1c1c1c;
+}
+
 .song-header {
   display: flex;
   align-items: center;
   gap: 14px;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
 .song-art {
@@ -58,6 +102,7 @@ button {
   border-radius: 10px;
   object-fit: cover;
   background: #292929;
+  flex-shrink: 0;
 }
 
 h2 {
@@ -77,6 +122,46 @@ h2 {
   font-size: 12px;
   font-weight: bold;
   text-decoration: none;
+}
+
+.eq {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 16px;
+  margin-left: auto;
+}
+
+.eq span {
+  width: 3px;
+  background: #b7ff3c;
+  border-radius: 2px;
+  animation: eq-bounce 0.9s ease-in-out infinite;
+}
+
+.eq span:nth-child(1) {
+  height: 6px;
+  animation-delay: 0s;
+}
+
+.eq span:nth-child(2) {
+  height: 14px;
+  animation-delay: 0.2s;
+}
+
+.eq span:nth-child(3) {
+  height: 9px;
+  animation-delay: 0.4s;
+}
+
+@keyframes eq-bounce {
+  0%,
+  100% {
+    transform: scaleY(0.4);
+  }
+  50% {
+    transform: scaleY(1);
+  }
 }
 
 .meaning {
@@ -102,6 +187,7 @@ h2 {
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 12px;
+  margin-bottom: 4px;
 }
 
 .themes span {
@@ -110,4 +196,30 @@ h2 {
   background: #292929;
   color: #b7ff3c;
   font-size: 11px;
+}
+
+#deeper-block {
+  margin-top: 14px;
+}
+
+#deep-loading {
+  margin-top: 14px;
+  margin-bottom: 0;
+}
+
+.deep {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #303030;
+}
+
+.deep p {
+  margin: 0 0 10px;
+  color: #d7d7d7;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.deep p:last-child {
+  margin-bottom: 0;
 }

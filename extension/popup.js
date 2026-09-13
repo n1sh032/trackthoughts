@@ -4,17 +4,28 @@ const connectView = document.getElementById('connect-view')
 const statusView = document.getElementById('status-view')
 const songView = document.getElementById('song-view')
 const statusText = document.getElementById('status-text')
+const statusDot = document.getElementById('status-dot')
+const actionError = document.getElementById('action-error')
 
 const songArt = document.getElementById('song-art')
 const songTitle = document.getElementById('song-title')
 const songArtist = document.getElementById('song-artist')
 const songLink = document.getElementById('song-link')
+const eq = document.getElementById('eq')
 
+const explainBlock = document.getElementById('explain-block')
+const explainButton = document.getElementById('explain-button')
 const meaningBlock = document.getElementById('meaning-block')
 const meaningText = document.getElementById('meaning-text')
 const meaningDetail = document.getElementById('meaning-detail')
 const meaningThemes = document.getElementById('meaning-themes')
 const meaningLoading = document.getElementById('meaning-loading')
+
+const deeperBlock = document.getElementById('deeper-block')
+const deeperButton = document.getElementById('deeper-button')
+const deepLoading = document.getElementById('deep-loading')
+const deepBlock = document.getElementById('deep-block')
+const deepText = document.getElementById('deep-text')
 
 document.getElementById('connect-button').addEventListener('click', () => {
   chrome.tabs.create({ url: `${API_BASE}/login` })
@@ -32,15 +43,79 @@ function showOnly(view) {
   view.classList.remove('hidden')
 }
 
+function showError(message) {
+  actionError.textContent = message
+  actionError.classList.remove('hidden')
+}
+
+async function fetchMeaning(title, artist, depth) {
+  const response = await fetch(
+    `${API_BASE}/api/meaning?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}&depth=${depth}`
+  )
+  const result = await response.json()
+  if (!response.ok) {
+    throw new Error(result.message || 'something went wrong')
+  }
+  return result
+}
+
+explainButton.addEventListener('click', async () => {
+  const data = await chrome.storage.local.get(['song'])
+  if (!data.song) return
+
+  actionError.classList.add('hidden')
+  explainBlock.classList.add('hidden')
+  meaningLoading.classList.remove('hidden')
+
+  try {
+    const result = await fetchMeaning(data.song.title, data.song.artist, 'quick')
+    const stillSameSong = await chrome.storage.local.get(['song'])
+    if (stillSameSong.song?.title === data.song.title && stillSameSong.song?.artist === data.song.artist) {
+      await chrome.storage.local.set({ meaning: result })
+    }
+  } catch (err) {
+    meaningLoading.classList.add('hidden')
+    explainBlock.classList.remove('hidden')
+    showError(err.message)
+  }
+
+  render()
+})
+
+deeperButton.addEventListener('click', async () => {
+  const data = await chrome.storage.local.get(['song'])
+  if (!data.song) return
+
+  actionError.classList.add('hidden')
+  deeperBlock.classList.add('hidden')
+  deepLoading.classList.remove('hidden')
+
+  try {
+    const result = await fetchMeaning(data.song.title, data.song.artist, 'deep')
+    const stillSameSong = await chrome.storage.local.get(['song'])
+    if (stillSameSong.song?.title === data.song.title && stillSameSong.song?.artist === data.song.artist) {
+      await chrome.storage.local.set({ deepMeaning: result })
+    }
+  } catch (err) {
+    deepLoading.classList.add('hidden')
+    deeperBlock.classList.remove('hidden')
+    showError(err.message)
+  }
+
+  render()
+})
+
 function render() {
-  chrome.storage.local.get(['connected', 'status', 'song', 'meaning'], (data) => {
+  chrome.storage.local.get(['connected', 'status', 'song', 'meaning', 'deepMeaning'], (data) => {
+    statusDot.classList.toggle('live', Boolean(data.connected && data.song))
+
     if (!data.connected) {
       showOnly(connectView)
       return
     }
 
     if (!data.song) {
-      statusText.textContent = data.status || 'nothing is playing right now'
+      statusText.textContent = data.status || 'Nothing playing right now'
       showOnly(statusView)
       return
     }
@@ -48,12 +123,9 @@ function render() {
     songTitle.textContent = data.song.title
     songArtist.textContent = data.song.artist
     songLink.href = data.song.spotifyUrl || '#'
-    if (data.song.image) {
-      songArt.src = data.song.image
-      songArt.classList.remove('hidden')
-    } else {
-      songArt.classList.add('hidden')
-    }
+    songArt.src = data.song.image || ''
+    songArt.style.visibility = data.song.image ? 'visible' : 'hidden'
+    eq.classList.toggle('hidden', !data.song.isPlaying)
 
     if (data.meaning) {
       meaningText.textContent = data.meaning.meaning
@@ -66,9 +138,32 @@ function render() {
       })
       meaningBlock.classList.remove('hidden')
       meaningLoading.classList.add('hidden')
+      explainBlock.classList.add('hidden')
+
+      if (data.deepMeaning && typeof data.deepMeaning.deepDive === 'string') {
+        deepText.innerHTML = ''
+        data.deepMeaning.deepDive
+          .split('\n\n')
+          .filter(Boolean)
+          .forEach((paragraph) => {
+            const p = document.createElement('p')
+            p.textContent = paragraph
+            deepText.appendChild(p)
+          })
+        deepBlock.classList.remove('hidden')
+        deeperBlock.classList.add('hidden')
+        deepLoading.classList.add('hidden')
+      } else {
+        if (data.deepMeaning) {
+          chrome.storage.local.remove('deepMeaning')
+        }
+        deepBlock.classList.add('hidden')
+        deeperBlock.classList.remove('hidden')
+      }
     } else {
       meaningBlock.classList.add('hidden')
-      meaningLoading.classList.remove('hidden')
+      meaningLoading.classList.add('hidden')
+      explainBlock.classList.remove('hidden')
     }
 
     showOnly(songView)

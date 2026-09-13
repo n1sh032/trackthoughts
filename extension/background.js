@@ -35,6 +35,7 @@ async function pollNow() {
         status: data.message || 'something went wrong',
         song: null,
         meaning: null,
+        deepMeaning: null,
       })
       updateBadge(false)
       return
@@ -46,6 +47,7 @@ async function pollNow() {
         status: data.message || 'nothing is playing right now',
         song: null,
         meaning: null,
+        deepMeaning: null,
       })
       updateBadge(false)
       return
@@ -60,6 +62,9 @@ async function pollNow() {
       status: null,
       song,
       meaning,
+      // a fresh track never has a deep-dive yet; only ever set by the
+      // popup's "go deeper" flow for the currently-playing song
+      ...(isNewTrack ? { deepMeaning: null } : {}),
     })
 
     updateBadge(true)
@@ -79,6 +84,7 @@ async function pollNow() {
       status: 'could not reach the trackthoughts server. is it running?',
       song: null,
       meaning: null,
+      deepMeaning: null,
     })
     updateBadge(false)
   }
