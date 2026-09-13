@@ -47,9 +47,17 @@ function saveMeaningCache() {
   saveJSON(CACHE_FILE, Object.fromEntries(meaningCache))
 }
 
+// title::artist -> { deepDive }
+const DEEP_CACHE_FILE = path.join(__dirname, 'deep-cache.json')
+const deepCache = new Map(Object.entries(loadJSON(DEEP_CACHE_FILE, {})))
+function saveDeepCache() {
+  saveJSON(DEEP_CACHE_FILE, Object.fromEntries(deepCache))
+}
+
 // avoids double-generating (and double-billing) if two requests for the
 // same not-yet-cached song land at the same time
 const pendingMeanings = new Map()
+const pendingDeepDives = new Map()
 
 app.use(
   cors({
@@ -280,13 +288,27 @@ async function generateMeaning(title, artist, context) {
         {
           role: 'system',
           content:
-            'You help someone FEEL a song, not analyze it. Write like you are texting a friend about a song that moved you - ' +
-            'plain words, short sentences, no music-critic language ("explores themes of", "juxtaposes", "the narrative arc"). ' +
-            'Picture the exact moment or feeling the artist was in when they wrote it, and describe that moment like you were there ' +
-            'with them, not like you are summarizing it from the outside. Never quote or reproduce actual lyrics. ' +
+            'You explain what a song actually means, the way one friend would explain it to another who just asked "wait, what is ' +
+            'this song even about?" Your job is to find the ONE specific emotional truth at the core of the song and say it ' +
+            'straight - not a mood, not a topic, an actual realization. Write directly to the listener using "you" as if the ' +
+            'song\'s narrator is them. Be concrete about the exact situation: who they are to each other, what they want, what ' +
+            'they are settling for, what they are pretending not to feel. Do not describe the song from outside it ("this song ' +
+            'is about heartbreak and longing"). State the specific belief or bargain the narrator has made with themselves, the ' +
+            'way you\'d explain a friend\'s messy situation back to them in one clear sentence they hadn\'t put into words yet.\n\n' +
+            'Ban list - never use these words/phrases or anything that sounds like them: "explores", "themes of", "juxtaposes", ' +
+            '"narrative", "delve", "raw and vulnerable", "journey", "grapples with", "captures the feeling of", "a testament to". ' +
+            'If your sentence could be printed on a music blog, rewrite it. Never quote or reproduce actual lyrics.\n\n' +
+            'Example of the voice you should write in, for a song about loving someone who\'s moved on but staying anyway: "its ' +
+            'about loving someone so deeply that youd rather stay in pain than let them go, you dont mind they are with someone ' +
+            'new, youll still wait quietly in the background. you keep hoping nothing ever changes even if it means you stay ' +
+            'hurting forever because deep down you are not temporary to them, you are just the one who will never leave." Match ' +
+            'that level of specificity and that voice - lowercase, run-on, honest, landing on one exact realization - not the ' +
+            'exact wording.\n\n' +
             'Respond with ONLY a JSON object, no markdown fences, no preamble, in this exact shape: ' +
-            '{"meaning": string (1 short sentence, the raw feeling in plain words), "detail": string (2-3 short sentences, put ' +
-            'the listener inside the moment), "themes": [string, string, string] (short lowercase feeling words)}.',
+            '{"meaning": string (1-2 sentences, the specific realization stated plainly, in the voice and specificity of the ' +
+            'example above), "detail": string (2-4 more sentences pushing further into the exact situation - what they tell ' +
+            'themselves to make it bearable, what they are actually afraid of), "themes": [string, string, string] (short ' +
+            'lowercase phrases naming the specific dynamic, not generic mood words - "not temporary to them" not "longing")}.',
         },
         {
           role: 'user',
@@ -314,7 +336,11 @@ async function getOrGenerateMeaning(title, artist) {
   const key = cacheKey(title, artist)
 
   if (meaningCache.has(key)) {
-    return { ...meaningCache.get(key), cached: true }
+    const cached = meaningCache.get(key)
+    if (cached && cached.meaning && cached.detail) {
+      return { ...cached, cached: true }
+    }
+    meaningCache.delete(key)
   }
 
   // if a generation for this exact song is already in flight, piggyback
@@ -326,6 +352,9 @@ async function getOrGenerateMeaning(title, artist) {
   const promise = (async () => {
     const context = await getGeniusContext(title, artist)
     const generated = await generateMeaning(title, artist, context)
+    if (!generated.meaning || !generated.detail) {
+      throw new Error('model did not return a valid meaning')
+    }
     const result = {
       meaning: generated.meaning,
       detail: generated.detail,
@@ -345,19 +374,120 @@ async function getOrGenerateMeaning(title, artist) {
   }
 }
 
+async function generateDeepDive(title, artist, quickMeaning, context) {
+  const contextLine = context?.description
+    ? `Background notes from Genius (for context only, do not quote directly): ${context.description}`
+    : 'No extra background notes are available - rely on general knowledge of the song.'
+
+  const priorLine = quickMeaning
+    ? `You already told the listener: "${quickMeaning.meaning}" ${quickMeaning.detail || ''}`.trim()
+    : ''
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content:
+            'The listener already has the one-line read on this song. Now go further - not longer, further. Each paragraph ' +
+            'should surface something the quick read did not say: the specific moment that would have triggered this feeling, ' +
+            'the contradiction the narrator is living inside (what they say vs. what they actually want), what they are avoiding ' +
+            'admitting to themselves, and what it would take for this to actually change. Write directly to the listener as ' +
+            '"you", concrete and specific to this exact relationship dynamic - never generic statements that could apply to any ' +
+            'sad song. If a paragraph could be moved to a different song\'s deep dive without editing it, it is too generic - ' +
+            'rewrite it to be specific to this one.\n\n' +
+            'Ban list - never use: "explores", "themes of", "juxtaposes", "narrative arc", "delve", "journey", "grapples with", ' +
+            '"a testament to", "underscores", "poignant". Plain, lowercase-friendly, honest language - like a friend who has sat ' +
+            'with this song enough times to actually understand what\'s happening in it. Never quote or reproduce actual lyrics.\n\n' +
+            'Respond with ONLY a JSON object, no markdown fences, no preamble, in this exact shape: {"deepDive": string (3-5 ' +
+            'paragraphs separated by \\n\\n, each one surfacing a specific new angle, not a restatement of the quick meaning)}.',
+        },
+        {
+          role: 'user',
+          content: `Song: "${title}" by ${artist}.\n${priorLine}\n${contextLine}`,
+        },
+      ],
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`openai api error: ${response.status}`)
+  }
+
+  const data = await response.json()
+  const text = data.choices?.[0]?.message?.content || '{}'
+  const cleaned = text.replace(/```json|```/g, '').trim()
+  return JSON.parse(cleaned)
+}
+
+async function getOrGenerateDeepDive(title, artist) {
+  const key = cacheKey(title, artist)
+
+  if (deepCache.has(key)) {
+    const cached = deepCache.get(key)
+    if (cached && typeof cached.deepDive === 'string') {
+      return { ...cached, cached: true }
+    }
+    // malformed entry from before validation was added - drop it and regenerate
+    deepCache.delete(key)
+  }
+
+  if (pendingDeepDives.has(key)) {
+    return pendingDeepDives.get(key)
+  }
+
+  const promise = (async () => {
+    const [context, quickMeaning] = await Promise.all([
+      getGeniusContext(title, artist),
+      getOrGenerateMeaning(title, artist),
+    ])
+    const generated = await generateDeepDive(title, artist, quickMeaning, context)
+    if (!generated.deepDive || typeof generated.deepDive !== 'string') {
+      throw new Error('model did not return a deepDive string')
+    }
+    const result = { deepDive: generated.deepDive }
+    deepCache.set(key, result)
+    saveDeepCache()
+    return { ...result, cached: false }
+  })()
+
+  pendingDeepDives.set(key, promise)
+  try {
+    return await promise
+  } finally {
+    pendingDeepDives.delete(key)
+  }
+}
+
 // on-demand only - this is the one endpoint that ever spends an OpenAI call
 app.get('/api/meaning', async (req, res) => {
-  const { title, artist } = req.query
+  const { title, artist, depth } = req.query
 
   if (!title || !artist) {
     return res.status(400).json({ message: 'title and artist are required' })
   }
 
   try {
+    if (depth === 'deep') {
+      const result = await getOrGenerateDeepDive(title, artist)
+      return res.json(result)
+    }
+
     const result = await getOrGenerateMeaning(title, artist)
     res.json(result)
   } catch (err) {
-    res.status(500).json({ message: 'could not generate a meaning for this song right now' })
+    const message =
+      depth === 'deep'
+        ? 'could not go deeper on this song right now'
+        : 'could not generate a meaning for this song right now'
+    res.status(500).json({ message })
   }
 })
 
